@@ -3,29 +3,20 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image, ImageEnhance
 import io
+import os
 
 st.set_page_config(
     page_title="PDF Question Extractor",
-    page_icon="📄",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS - darker theme to match your website
+# Custom CSS - clean and visible
 st.markdown("""
 <style>
-    /* Make everything visible with better contrast */
-    .stApp {
-        background-color: #1e1e1e;
-    }
-    
     .main {
         padding: 2rem;
-        background-color: #1e1e1e;
-    }
-    
-    h1, h2, h3, p, label, .stMarkdown {
-        color: #e0e0e0 !important;
     }
     
     .stButton>button {
@@ -44,51 +35,22 @@ st.markdown("""
         transform: translateY(-2px);
     }
     
-    .uploadedFile {
-        background-color: #2d2d2d;
-        border: 1px solid #424242;
-        border-radius: 8px;
-        padding: 1rem;
-    }
-    
-    .stNumberInput > div > div > input {
-        background-color: #2d2d2d;
-        color: #e0e0e0;
-        border: 1px solid #424242;
-    }
-    
-    /* Info boxes */
     .info-box {
-        background-color: #2d2d2d;
-        border-left: 4px solid #42a5f5;
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
         padding: 1rem;
         margin: 1rem 0;
         border-radius: 4px;
-        color: #e0e0e0;
     }
     
     .success-box {
-        background-color: #1e3a1e;
+        background-color: #d4edda;
         border-left: 4px solid #28a745;
         padding: 1rem;
         margin: 1rem 0;
         border-radius: 4px;
-        color: #90ee90;
     }
     
-    /* File uploader styling */
-    .stFileUploader {
-        background-color: #2d2d2d;
-        border: 2px dashed #424242;
-        border-radius: 8px;
-        padding: 2rem;
-    }
-    
-    .stFileUploader label {
-        color: #e0e0e0 !important;
-    }
-    
-    /* Download button */
     .stDownloadButton>button {
         background-color: #28a745;
         color: white;
@@ -101,8 +63,17 @@ st.markdown("""
     .stDownloadButton>button:hover {
         background-color: #218838;
     }
+    
+    .upload-section {
+        border: 2px dashed #ddd;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        margin: 2rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
+
 
 class FinalOCRProcessor:
     def __init__(self, input_pdf):
@@ -122,7 +93,6 @@ class FinalOCRProcessor:
     def detect_questions_with_ocr(self, page_num: int):
         """Use OCR to detect question regions accurately"""
         ocr_data, img_size, page_rect = self.extract_text_with_ocr(page_num)
-        page = self.doc[page_num]
         scale_x = page_rect.width / img_size[0]
         scale_y = page_rect.height / img_size[1]
 
@@ -166,8 +136,8 @@ class FinalOCRProcessor:
 
         return regions, questions
 
-    def calculate_scaling(self, crop_rect, enlarge_factor=8.0):
-        """Calculate scaling - fixed at 8x for maximum enlargement"""
+    def calculate_scaling(self, crop_rect, enlarge_factor=1.0):
+        """Calculate scaling - fixed at 1x"""
         crop_width = crop_rect.width
         crop_height = crop_rect.height
         target_width = 792
@@ -182,7 +152,7 @@ class FinalOCRProcessor:
         return final_scale, margin
 
     def create_final_question_pages(self, page_num: int):
-        """Create question pages with 8x enlargement"""
+        """Create question pages with 1x enlargement"""
         regions, questions = self.detect_questions_with_ocr(page_num)
 
         if not regions:
@@ -193,7 +163,7 @@ class FinalOCRProcessor:
         for i, region in enumerate(regions, 1):
             new_page = output_doc.new_page(width=792, height=612)
             crop_rect = fitz.Rect(region)
-            scale, margin = self.calculate_scaling(crop_rect, enlarge_factor=8.0)
+            scale, margin = self.calculate_scaling(crop_rect, enlarge_factor=1.0)
             scaled_width = crop_rect.width * scale
             scaled_height = crop_rect.height * scale
             x_offset = (792 - scaled_width) / 2
@@ -225,18 +195,19 @@ class FinalOCRProcessor:
     def close(self):
         self.doc.close()
 
+
 # Main App
-st.title("📄 PDF Question Extractor")
+st.title("PDF Question Extractor")
 st.markdown("### Extract and enlarge questions from PDF worksheets")
 
 # Info box
 st.markdown("""
 <div class="info-box">
-    <strong>ℹ️ How it works:</strong><br><br>
+    <strong>How it works:</strong><br><br>
     1. Upload your PDF worksheet<br>
     2. Select the page number<br>
     3. Click "Process PDF" to extract questions<br>
-    4. Download your enlarged PDF (8x larger, one question per page)
+    4. Download your enlarged PDF
 </div>
 """, unsafe_allow_html=True)
 
@@ -248,7 +219,7 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    st.success(f"✅ File uploaded: {uploaded_file.name}")
+    st.success(f"File uploaded: {uploaded_file.name}")
     
     try:
         pdf_bytes = uploaded_file.read()
@@ -256,19 +227,20 @@ if uploaded_file is not None:
         total_pages = len(temp_doc)
         temp_doc.close()
         
-        st.info(f"📖 Total pages in document: {total_pages}")
+        st.info(f"Total pages in document: {total_pages}")
         
         page_number = st.number_input(
             "Page Number",
             min_value=1,
             max_value=total_pages,
             value=1,
-            help="Select which page to process (1-indexed)"
+            step=1,
+            help="Select which page to process"
         )
         
         st.markdown("---")
         
-        if st.button("🚀 Process PDF", type="primary"):
+        if st.button("Process PDF", type="primary"):
             with st.spinner("Processing PDF... This may take a moment."):
                 try:
                     uploaded_file.seek(0)
@@ -280,19 +252,22 @@ if uploaded_file is not None:
                     output_bytes = output_doc.write()
                     output_doc.close()
                     processor.close()
+
+                    # Create output filename with original name
+                    base_name = os.path.splitext(uploaded_file.name)[0]
+                    output_filename = f"{base_name}_enlarged.pdf"
                     
                     st.markdown(f"""
                     <div class="success-box">
-                        <strong>🎉 Processing Complete!</strong><br><br>
+                        <strong>Processing Complete!</strong><br><br>
                         Detected and extracted <strong>{num_questions}</strong> questions<br>
-                        Enlargement: <strong>8x</strong><br>
+                        Enlargement: <strong>1x</strong><br>
                         Format: One question per landscape page
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    output_filename = f"enlarged_questions_8x.pdf"
                     st.download_button(
-                        label="⬇️ Download Processed PDF",
+                        label="Download Processed PDF",
                         data=output_bytes,
                         file_name=output_filename,
                         mime="application/pdf",
@@ -300,22 +275,22 @@ if uploaded_file is not None:
                     )
                     
                 except Exception as e:
-                    st.error(f"❌ Error processing PDF: {str(e)}")
+                    st.error(f"Error processing PDF: {str(e)}")
     
     except Exception as e:
-        st.error(f"❌ Error reading PDF: {str(e)}")
+        st.error(f"Error reading PDF: {str(e)}")
 
 else:
     st.markdown("""
-    <div style="text-align: center; padding: 2rem; color: #a0a0a0;">
-        <h3 style="color: #e0e0e0;">👆 Upload a PDF to get started</h3>
+    <div class="upload-section">
+        <h3>Upload a PDF to get started</h3>
         <p>Select a PDF file containing questions you want to extract and enlarge.</p>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #a0a0a0; font-size: 14px;">
+<div style="text-align: center; color: #666; font-size: 14px;">
     <p>Created by Derik Vo | N2Y Adaptation Tools</p>
 </div>
 """, unsafe_allow_html=True)
