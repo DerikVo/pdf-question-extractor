@@ -1,11 +1,25 @@
+import streamlit as st
+import fitz  # PyMuPDF
+import pytesseract
+from PIL import Image, ImageEnhance
+import io
+import os
+
+# Page setup must come before any Streamlit output
+st.set_page_config(
+    page_title="PDF Question Extractor",
+    page_icon=None,
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Theme-aware CSS (works in dark and light mode)
 st.markdown("""
 <style>
-    /* Base layout */
     .main {
         padding: 2rem;
     }
 
-    /* Use theme variables for adaptive styling */
     .stButton>button {
         background-color: var(--primary-color);
         color: white;
@@ -21,7 +35,6 @@ st.markdown("""
         transform: translateY(-2px);
     }
 
-    /* Info box that adapts to dark/light themes */
     .info-box {
         background-color: var(--background-color-secondary);
         border-left: 4px solid var(--primary-color);
@@ -31,7 +44,6 @@ st.markdown("""
         color: var(--text-color);
     }
 
-    /* Success box */
     .success-box {
         background-color: rgba(40, 167, 69, 0.15);
         border-left: 4px solid #28a745;
@@ -41,7 +53,6 @@ st.markdown("""
         color: var(--text-color);
     }
 
-    /* Download button */
     .stDownloadButton>button {
         background-color: #28a745;
         color: white;
@@ -54,7 +65,6 @@ st.markdown("""
         background-color: #218838;
     }
 
-    /* Upload section box */
     .upload-section {
         border: 2px dashed #666;
         border-radius: 10px;
@@ -65,7 +75,6 @@ st.markdown("""
         color: var(--text-color);
     }
 
-    /* Adjust text color in dark/light modes */
     :root {
         --primary-color: #007bff;
         --background-color-secondary: #f8f9fa;
