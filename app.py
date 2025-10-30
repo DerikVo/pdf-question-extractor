@@ -1,14 +1,9 @@
-!apt-get install -y tesseract-ocr > /dev/null
-!pip install PyMuPDF Pillow pytesseract -q
-
 import streamlit as st
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image, ImageEnhance
 from pathlib import Path
 import io
-import tempfile
-import os
 
 st.set_page_config(
     page_title="PDF Question Extractor",
@@ -225,7 +220,7 @@ if uploaded_file is not None:
             "Page Number",
             min_value=1,
             max_value=total_pages,
-            value=min(22, total_pages),
+            value=min(1, total_pages),
             help="Select which page to process (1-indexed)"
         )
     
@@ -275,7 +270,7 @@ if uploaded_file is not None:
                 
             except Exception as e:
                 st.error(f"❌ Error processing PDF: {str(e)}")
-                st.error("Please ensure Tesseract OCR is installed on the server.")
+                st.error("Please check that the PDF contains clearly numbered questions.")
 
 else:
     st.markdown("""
