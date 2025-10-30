@@ -2,21 +2,32 @@ import streamlit as st
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image, ImageEnhance
-from pathlib import Path
 import io
 
 st.set_page_config(
     page_title="PDF Question Extractor",
     page_icon="📄",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS to match your website theme
+# Custom CSS - darker theme to match your website
 st.markdown("""
 <style>
+    /* Make everything visible with better contrast */
+    .stApp {
+        background-color: #1e1e1e;
+    }
+    
     .main {
         padding: 2rem;
+        background-color: #1e1e1e;
     }
+    
+    h1, h2, h3, p, label, .stMarkdown {
+        color: #e0e0e0 !important;
+    }
+    
     .stButton>button {
         background-color: #007bff;
         color: white;
@@ -25,31 +36,70 @@ st.markdown("""
         font-size: 16px;
         border: none;
         transition: all 0.3s ease;
+        width: 100%;
     }
+    
     .stButton>button:hover {
         background-color: #0056b3;
         transform: translateY(-2px);
     }
-    .upload-section {
-        border: 2px dashed #ddd;
-        border-radius: 10px;
-        padding: 2rem;
-        text-align: center;
-        margin: 2rem 0;
+    
+    .uploadedFile {
+        background-color: #2d2d2d;
+        border: 1px solid #424242;
+        border-radius: 8px;
+        padding: 1rem;
     }
+    
+    .stNumberInput > div > div > input {
+        background-color: #2d2d2d;
+        color: #e0e0e0;
+        border: 1px solid #424242;
+    }
+    
+    /* Info boxes */
     .info-box {
-        background-color: #f8f9fa;
-        border-left: 4px solid #007bff;
+        background-color: #2d2d2d;
+        border-left: 4px solid #42a5f5;
         padding: 1rem;
         margin: 1rem 0;
         border-radius: 4px;
+        color: #e0e0e0;
     }
+    
     .success-box {
-        background-color: #d4edda;
+        background-color: #1e3a1e;
         border-left: 4px solid #28a745;
         padding: 1rem;
         margin: 1rem 0;
         border-radius: 4px;
+        color: #90ee90;
+    }
+    
+    /* File uploader styling */
+    .stFileUploader {
+        background-color: #2d2d2d;
+        border: 2px dashed #424242;
+        border-radius: 8px;
+        padding: 2rem;
+    }
+    
+    .stFileUploader label {
+        color: #e0e0e0 !important;
+    }
+    
+    /* Download button */
+    .stDownloadButton>button {
+        background-color: #28a745;
+        color: white;
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 16px;
+        border-radius: 8px;
+    }
+    
+    .stDownloadButton>button:hover {
+        background-color: #218838;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -79,7 +129,7 @@ class FinalOCRProcessor:
         questions = []
         for i, text in enumerate(ocr_data['text']):
             text = text.strip()
-            if text and text[0].isdigit() and any(marker in text for marker in ['.', ')']):
+            if text and len(text) > 0 and text[0].isdigit() and any(marker in text for marker in ['.', ')']):
                 x = ocr_data['left'][i] * scale_x
                 y = ocr_data['top'][i] * scale_y
                 width = ocr_data['width'][i] * scale_x
@@ -116,8 +166,8 @@ class FinalOCRProcessor:
 
         return regions, questions
 
-    def calculate_scaling(self, crop_rect, enlarge_factor=1.0):
-        """Calculate scaling based on user's enlargement factor"""
+    def calculate_scaling(self, crop_rect, enlarge_factor=8.0):
+        """Calculate scaling - fixed at 8x for maximum enlargement"""
         crop_width = crop_rect.width
         crop_height = crop_rect.height
         target_width = 792
@@ -131,8 +181,8 @@ class FinalOCRProcessor:
         final_scale = base_scale * enlarge_factor
         return final_scale, margin
 
-    def create_final_question_pages(self, page_num: int, enlarge_factor=1.25):
-        """Create question pages with user-controlled enlargement"""
+    def create_final_question_pages(self, page_num: int):
+        """Create question pages with 8x enlargement"""
         regions, questions = self.detect_questions_with_ocr(page_num)
 
         if not regions:
@@ -143,7 +193,7 @@ class FinalOCRProcessor:
         for i, region in enumerate(regions, 1):
             new_page = output_doc.new_page(width=792, height=612)
             crop_rect = fitz.Rect(region)
-            scale, margin = self.calculate_scaling(crop_rect, enlarge_factor)
+            scale, margin = self.calculate_scaling(crop_rect, enlarge_factor=8.0)
             scaled_width = crop_rect.width * scale
             scaled_height = crop_rect.height * scale
             x_offset = (792 - scaled_width) / 2
@@ -176,114 +226,96 @@ class FinalOCRProcessor:
         self.doc.close()
 
 # Main App
-st.title("📄 PDF Question Extractor & Enlarger")
-st.markdown("### N2Y Adaptation Tool")
-st.markdown("Extract individual questions from PDF worksheets and enlarge them for better accessibility.")
+st.title("📄 PDF Question Extractor")
+st.markdown("### Extract and enlarge questions from PDF worksheets")
 
 # Info box
 st.markdown("""
 <div class="info-box">
-    <strong>ℹ️ How it works:</strong>
-    <ol>
-        <li>Upload your PDF file containing questions</li>
-        <li>Select the page number you want to process</li>
-        <li>Adjust the enlargement factor (1x = original size, 8x = 8 times larger)</li>
-        <li>Click "Process PDF" to extract and enlarge each question</li>
-        <li>Download your adapted PDF with one question per page</li>
-    </ol>
+    <strong>ℹ️ How it works:</strong><br><br>
+    1. Upload your PDF worksheet<br>
+    2. Select the page number<br>
+    3. Click "Process PDF" to extract questions<br>
+    4. Download your enlarged PDF (8x larger, one question per page)
 </div>
 """, unsafe_allow_html=True)
 
 # File upload
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    uploaded_file = st.file_uploader(
-        "Choose a PDF file",
-        type=['pdf'],
-        help="Upload the PDF containing questions you want to extract and enlarge"
-    )
+uploaded_file = st.file_uploader(
+    "Choose a PDF file",
+    type=['pdf'],
+    help="Upload the PDF containing questions you want to extract and enlarge"
+)
 
 if uploaded_file is not None:
     st.success(f"✅ File uploaded: {uploaded_file.name}")
     
-    pdf_bytes = uploaded_file.read()
-    temp_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    total_pages = len(temp_doc)
-    temp_doc.close()
-    
-    st.info(f"📖 Total pages in document: {total_pages}")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
+    try:
+        pdf_bytes = uploaded_file.read()
+        temp_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        total_pages = len(temp_doc)
+        temp_doc.close()
+        
+        st.info(f"📖 Total pages in document: {total_pages}")
+        
         page_number = st.number_input(
             "Page Number",
             min_value=1,
             max_value=total_pages,
-            value=min(1, total_pages),
+            value=1,
             help="Select which page to process (1-indexed)"
         )
+        
+        st.markdown("---")
+        
+        if st.button("🚀 Process PDF", type="primary"):
+            with st.spinner("Processing PDF... This may take a moment."):
+                try:
+                    uploaded_file.seek(0)
+                    pdf_bytes = uploaded_file.read()
+                    
+                    processor = FinalOCRProcessor(pdf_bytes)
+                    output_doc, num_questions = processor.create_final_question_pages(page_number - 1)
+                    
+                    output_bytes = output_doc.write()
+                    output_doc.close()
+                    processor.close()
+                    
+                    st.markdown(f"""
+                    <div class="success-box">
+                        <strong>🎉 Processing Complete!</strong><br><br>
+                        Detected and extracted <strong>{num_questions}</strong> questions<br>
+                        Enlargement: <strong>8x</strong><br>
+                        Format: One question per landscape page
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    output_filename = f"enlarged_questions_8x.pdf"
+                    st.download_button(
+                        label="⬇️ Download Processed PDF",
+                        data=output_bytes,
+                        file_name=output_filename,
+                        mime="application/pdf",
+                        type="primary"
+                    )
+                    
+                except Exception as e:
+                    st.error(f"❌ Error processing PDF: {str(e)}")
     
-    with col2:
-        enlarge_factor = st.slider(
-            "Enlargement Factor",
-            min_value=1.0,
-            max_value=10.0,
-            value=8.0,
-            step=0.5,
-            help="How much to enlarge the questions (1x = original size)"
-        )
-    
-    if st.button("🚀 Process PDF", type="primary"):
-        with st.spinner("Processing PDF... This may take a moment."):
-            try:
-                uploaded_file.seek(0)
-                pdf_bytes = uploaded_file.read()
-                
-                processor = FinalOCRProcessor(pdf_bytes)
-                output_doc, num_questions = processor.create_final_question_pages(
-                    page_number - 1,
-                    enlarge_factor=enlarge_factor
-                )
-                
-                output_bytes = output_doc.write()
-                output_doc.close()
-                processor.close()
-                
-                st.markdown(f"""
-                <div class="success-box">
-                    <strong>🎉 Processing Complete!</strong><br>
-                    Detected and extracted <strong>{num_questions}</strong> questions<br>
-                    Enlargement factor: <strong>{enlarge_factor}x</strong><br>
-                    Output format: One question per landscape page
-                </div>
-                """, unsafe_allow_html=True)
-                
-                output_filename = f"enlarged_questions_{enlarge_factor}x.pdf"
-                st.download_button(
-                    label="⬇️ Download Processed PDF",
-                    data=output_bytes,
-                    file_name=output_filename,
-                    mime="application/pdf",
-                    type="primary"
-                )
-                
-            except Exception as e:
-                st.error(f"❌ Error processing PDF: {str(e)}")
-                st.error("Please check that the PDF contains clearly numbered questions.")
+    except Exception as e:
+        st.error(f"❌ Error reading PDF: {str(e)}")
 
 else:
     st.markdown("""
-    <div class="upload-section">
-        <h3>👆 Upload a PDF to get started</h3>
+    <div style="text-align: center; padding: 2rem; color: #a0a0a0;">
+        <h3 style="color: #e0e0e0;">👆 Upload a PDF to get started</h3>
         <p>Select a PDF file containing questions you want to extract and enlarge.</p>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #666; font-size: 14px;">
-    <p>Created by Derik Vo | Part of the N2Y Adaptation Tools Suite</p>
-    <p>For support or questions, please contact your administrator.</p>
+<div style="text-align: center; color: #a0a0a0; font-size: 14px;">
+    <p>Created by Derik Vo | N2Y Adaptation Tools</p>
 </div>
 """, unsafe_allow_html=True)
